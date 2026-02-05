@@ -127,6 +127,7 @@ export default function NewTieredBundlePage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [products, setProducts] = useState<SelectedProduct[]>([]);
+  const [displayProduct, setDisplayProduct] = useState<{ id: string; title: string } | null>(null);
   const [tiers, setTiers] = useState<BundleTier[]>([
     {
       id: "1",
@@ -280,6 +281,8 @@ export default function NewTieredBundlePage() {
             onDescriptionChange={setDescription}
             titlePlaceholder="e.g., Holiday Gift Collection"
             descriptionPlaceholder="Describe your tiered bundle..."
+            displayProduct={displayProduct}
+            onDisplayProductChange={setDisplayProduct}
           />
 
           {/* Tiers */}

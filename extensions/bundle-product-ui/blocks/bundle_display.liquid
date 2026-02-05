@@ -157,34 +157,122 @@
 
 <script>
   (function() {
+    // ========== DEBUG CONFIG ==========
+    const DEBUG = true; // Set to false to disable debug messages
+    const SHOW_DEBUG_PANEL = true; // Set to false to hide on-page debug panel
+    // ==================================
+
+    function debugLog(category, message, data = null) {
+      if (!DEBUG) return;
+      const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
+      const prefix = `[Bundle Block ${timestamp}]`;
+      if (data) {
+        console.log(`${prefix} [${category}]`, message, data);
+      } else {
+        console.log(`${prefix} [${category}]`, message);
+      }
+      updateDebugPanel(category, message, data);
+    }
+
+    function updateDebugPanel(category, message, data) {
+      if (!SHOW_DEBUG_PANEL) return;
+      const panel = document.getElementById('bundle-debug-panel');
+      if (panel) {
+        const line = document.createElement('div');
+        line.innerHTML = `<span style="color:#888">[${category}]</span> ${message}${data ? ': ' + JSON.stringify(data).slice(0, 100) : ''}`;
+        panel.appendChild(line);
+        panel.scrollTop = panel.scrollHeight;
+      }
+    }
+
+    debugLog('INIT', '🎁 Bundle Display Block initializing...');
+
     const bundleDisplay = document.querySelector('.bundle-display');
+    if (!bundleDisplay) {
+      debugLog('ERROR', '❌ Bundle display element not found');
+      return;
+    }
+
     const productId = bundleDisplay.dataset.productId;
+    debugLog('INIT', '📦 Product ID from data attribute', productId);
+    debugLog('INIT', '📍 Page URL', window.location.href);
+    debugLog('INIT', '🏪 Shop domain', window.Shopify?.shop || 'Not available');
+
     const showIndividualPrices = {{ block.settings.show_individual_prices }};
     const showSavingsBadge = {{ block.settings.show_savings_badge }};
+    debugLog('INIT', '⚙️ Settings', { showIndividualPrices, showSavingsBadge });
+
+    // Add debug panel to page
+    if (SHOW_DEBUG_PANEL) {
+      const debugPanel = document.createElement('div');
+      debugPanel.id = 'bundle-debug-panel';
+      debugPanel.style.cssText = 'background:#1a1a2e;color:#0f0;padding:12px;margin:10px 0;border-radius:8px;font-family:monospace;font-size:11px;max-height:200px;overflow-y:auto;border:2px solid #16213e;';
+      debugPanel.innerHTML = '<div style="color:#fff;font-weight:bold;margin-bottom:8px;">🔧 Bundle Debug Console</div>';
+      bundleDisplay.insertBefore(debugPanel, bundleDisplay.firstChild);
+    }
 
     async function loadBundle() {
       try {
+        debugLog('FETCH', '🔄 Starting bundle fetch...');
+
         // Fetch bundle data via App Proxy
-        const response = await fetch(`/apps/bundles/api/storefront/bundle/by-product/${productId}`);
+        const apiUrl = `/apps/bundles/api/storefront/bundle/by-product/${productId}`;
+        debugLog('FETCH', '🌐 API URL', apiUrl);
+
+        const startTime = performance.now();
+        const response = await fetch(apiUrl);
+        const duration = Math.round(performance.now() - startTime);
+
+        debugLog('FETCH', `📡 Response received in ${duration}ms`, {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          headers: {
+            contentType: response.headers.get('content-type'),
+            cacheControl: response.headers.get('cache-control')
+          }
+        });
 
         if (!response.ok) {
           if (response.status === 404) {
-            // No bundle for this product, hide the block
+            debugLog('FETCH', 'ℹ️ No bundle found for this product (404)');
+            const errorBody = await response.json().catch(() => null);
+            debugLog('FETCH', '📋 404 Response body', errorBody);
             bundleDisplay.style.display = 'none';
             return;
           }
-          throw new Error('Failed to load bundle');
+          const errorText = await response.text();
+          debugLog('ERROR', `❌ HTTP Error ${response.status}`, errorText);
+          throw new Error(`Failed to load bundle: ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
+        debugLog('DATA', '✅ Bundle data received', {
+          hasBundle: !!data.bundle,
+          bundleId: data.bundle?.id,
+          bundleTitle: data.bundle?.title,
+          bundleType: data.bundle?.type,
+          itemCount: data.bundle?.items?.length
+        });
+
+        if (!data.bundle) {
+          debugLog('ERROR', '⚠️ Response OK but no bundle in data');
+          bundleDisplay.style.display = 'none';
+          return;
+        }
+
         const bundle = data.bundle;
+        debugLog('RENDER', '🎨 Rendering bundle', bundle.title);
 
         // Render bundle
         renderBundle(bundle);
+        debugLog('RENDER', '✅ Bundle rendered successfully');
+
       } catch (error) {
+        debugLog('ERROR', '❌ Error loading bundle', { message: error.message, stack: error.stack });
         console.error('Error loading bundle:', error);
         bundleDisplay.querySelector('.bundle-loading').innerHTML =
-          '<div class="bundle-error">Failed to load bundle information</div>';
+          `<div class="bundle-error">Failed to load bundle information<br><small style="color:#666">${error.message}</small></div>`;
       }
     }
 
@@ -248,6 +336,8 @@
     }
 
     async function addBundleToCart(bundle) {
+      debugLog('CART', '🛒 Adding bundle to cart...', { bundleId: bundle.id, title: bundle.title });
+
       const button = bundleDisplay.querySelector('.bundle-add-to-cart');
       button.disabled = true;
       button.textContent = 'Adding to Cart...';
@@ -255,7 +345,7 @@
       try {
         // Add bundle items to cart
         const items = bundle.items.map(item => ({
-          id: item.variantId || item.product.variants[0].id,
+          id: item.variantId || item.product?.variants?.[0]?.id,
           quantity: item.quantity,
           properties: {
             '_bundle_id': bundle.id,
@@ -264,21 +354,33 @@
           }
         }));
 
+        debugLog('CART', '📦 Cart items prepared', items);
+
         const response = await fetch('/cart/add.js', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ items })
         });
 
-        if (!response.ok) throw new Error('Failed to add to cart');
+        debugLog('CART', '📡 Cart response', { status: response.status, ok: response.ok });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => null);
+          debugLog('CART', '❌ Cart error response', errorData);
+          throw new Error(errorData?.description || 'Failed to add to cart');
+        }
+
+        const cartData = await response.json();
+        debugLog('CART', '✅ Added to cart successfully', cartData);
 
         // Redirect to cart
         window.location.href = '/cart';
       } catch (error) {
+        debugLog('ERROR', '❌ Cart error', { message: error.message });
         console.error('Error adding to cart:', error);
         button.textContent = 'Add Bundle to Cart';
         button.disabled = false;
-        alert('Failed to add bundle to cart. Please try again.');
+        alert(`Failed to add bundle to cart: ${error.message}`);
       }
     }
 

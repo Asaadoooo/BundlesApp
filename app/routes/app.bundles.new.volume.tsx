@@ -161,6 +161,7 @@ export default function NewVolumeBundlePage() {
       label: "Buy 10+, get 20% off",
     },
   ]);
+  const [displayProduct, setDisplayProduct] = useState<{ id: string; title: string } | null>(null);
 
 
   const addRule = useCallback(() => {
@@ -299,6 +300,8 @@ export default function NewVolumeBundlePage() {
             onDescriptionChange={setDescription}
             titlePlaceholder="e.g., Bulk Discount - Buy More Save More"
             descriptionPlaceholder="Describe your volume discount..."
+            displayProduct={displayProduct}
+            onDisplayProductChange={setDisplayProduct}
           />
 
           {/* Volume Rules */}

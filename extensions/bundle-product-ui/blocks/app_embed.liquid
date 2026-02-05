@@ -1,84 +1,286 @@
-{% comment %}
-  Bundle Display App Embed
-  Automatically injects on product pages when a bundle exists
-{% endcomment %}
+<!-- Bundle App Embed - Injects bundle display below Buy it now button -->
+<script>
+(function() {
+  // Only run on product pages
+  if (!window.location.pathname.includes('/products/')) return;
 
-{% if template contains 'product' %}
-<div id="bundle-app-embed" data-product-id="{{ product.id }}" style="display: none;">
-  <div class="bundle-embed-wrapper">
-    <div class="bundle-embed-loading">
-      <p>🔍 Checking for bundles...</p>
-    </div>
-    <div class="bundle-embed-content"></div>
-  </div>
-</div>
+  const productId = {{ product.id | default: 'null' }};
+  if (!productId) return;
+
+  // Settings from schema
+  const settings = {
+    showIndividualPrices: {{ block.settings.show_individual_prices | default: true }},
+    showSavingsBadge: {{ block.settings.show_savings_badge | default: true }},
+    primaryColor: '{{ block.settings.primary_color | default: "#000000" }}'
+  };
+
+  function injectBundleDisplay() {
+    // Find the buy button or add to cart form
+    const buyButtonSelectors = [
+      '.shopify-payment-button',           // Buy it now button container
+      'button[name="add"]',                 // Add to cart button
+      '.product-form__submit',              // Common submit button class
+      '[data-add-to-cart]',                 // Data attribute selector
+      '.product-form__buttons',             // Button container
+      'form[action="/cart/add"] button[type="submit"]',
+      '.product__submit__add',
+      '.add-to-cart',
+      '#AddToCart'
+    ];
+
+    let insertTarget = null;
+
+    for (const selector of buyButtonSelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        // Get the parent container for better placement
+        insertTarget = element.closest('.product-form__buttons') ||
+                       element.closest('.product-form') ||
+                       element.parentElement;
+        break;
+      }
+    }
+
+    if (!insertTarget) {
+      console.log('[Bundle Embed] Could not find buy button, trying form');
+      insertTarget = document.querySelector('form[action="/cart/add"]');
+    }
+
+    if (!insertTarget) {
+      console.log('[Bundle Embed] No suitable injection point found');
+      return;
+    }
+
+    // Create bundle container
+    const bundleContainer = document.createElement('div');
+    bundleContainer.id = 'bundle-embed-display';
+    bundleContainer.innerHTML = `
+      <div class="bundle-display" data-product-id="${productId}">
+        <div class="bundle-loading">
+          <p>Loading bundle...</p>
+        </div>
+        <div class="bundle-content" style="display: none;"></div>
+      </div>
+    `;
+
+    // Insert after the buy button container
+    insertTarget.parentNode.insertBefore(bundleContainer, insertTarget.nextSibling);
+
+    // Load bundle data
+    loadBundle();
+  }
+
+  async function loadBundle() {
+    const bundleDisplay = document.querySelector('#bundle-embed-display .bundle-display');
+    if (!bundleDisplay) return;
+
+    try {
+      const apiUrl = `/apps/bundles/api/storefront/bundle/by-product/${productId}`;
+      console.log('[Bundle Embed] Fetching:', apiUrl);
+      const response = await fetch(apiUrl);
+      console.log('[Bundle Embed] Response status:', response.status);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // No bundle for this product - hide the container
+          console.log('[Bundle Embed] No bundle found (404)');
+          bundleDisplay.parentElement.style.display = 'none';
+          return;
+        }
+        const errorText = await response.text();
+        console.error('[Bundle Embed] Error response:', errorText);
+        throw new Error(`Failed to load bundle: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('[Bundle Embed] Bundle data:', data);
+
+      if (!data.bundle) {
+        console.log('[Bundle Embed] No bundle in response');
+        bundleDisplay.parentElement.style.display = 'none';
+        return;
+      }
+
+      renderBundle(data.bundle, bundleDisplay);
+    } catch (error) {
+      console.error('[Bundle Embed] Error loading bundle:', error);
+      bundleDisplay.querySelector('.bundle-loading').innerHTML =
+        `<div class="bundle-error">Failed to load bundle: ${error.message}</div>`;
+    }
+  }
+
+  function renderBundle(bundle, container) {
+    const loadingEl = container.querySelector('.bundle-loading');
+    const contentEl = container.querySelector('.bundle-content');
+
+    // API returns: displayPrice, compareAtPrice, savingsAmount, savingsPercent
+    // Items have: imageUrl, title, price, variantId, quantity
+    const items = bundle.items || [];
+    const displayPrice = bundle.displayPrice || 0;
+    const compareAtPrice = bundle.compareAtPrice;
+    const savingsAmount = bundle.savingsAmount;
+    const savingsPercent = bundle.savingsPercent;
+
+    const html = `
+      <div class="bundle-header">
+        <div class="bundle-title">${escapeHtml(bundle.title)}</div>
+        ${bundle.description ? `<div class="bundle-description">${escapeHtml(bundle.description)}</div>` : ''}
+      </div>
+
+      ${items.length > 0 ? `
+      <div class="bundle-items">
+        <strong>What's included:</strong>
+        ${items.map(item => `
+          <div class="bundle-item">
+            ${item.imageUrl ? `
+              <img src="${item.imageUrl}" alt="${escapeHtml(item.title || 'Product')}" class="bundle-item-image">
+            ` : ''}
+            <div class="bundle-item-details">
+              <div class="bundle-item-title">${item.quantity}x ${escapeHtml(item.title || 'Product')}</div>
+              ${settings.showIndividualPrices && item.price ? `
+                <div class="bundle-item-price">€${item.price.toFixed(2)}</div>
+              ` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      ` : ''}
+
+      <div class="bundle-pricing">
+        <div class="bundle-price-row">
+          <span class="bundle-price-label">Bundle Price:</span>
+          <div>
+            ${compareAtPrice && compareAtPrice > displayPrice ? `
+              <span class="bundle-price-compare">€${compareAtPrice.toFixed(2)}</span>
+            ` : ''}
+            <span class="bundle-price-value">€${displayPrice.toFixed(2)}</span>
+          </div>
+        </div>
+
+        ${settings.showSavingsBadge && savingsAmount && savingsAmount > 0 ? `
+          <div class="bundle-savings-badge">
+            You save €${savingsAmount.toFixed(2)} (${savingsPercent ? savingsPercent.toFixed(0) : 0}%)
+          </div>
+        ` : ''}
+      </div>
+
+      <button class="bundle-add-to-cart" data-bundle-id="${bundle.id}">
+        Add Bundle to Cart
+      </button>
+    `;
+
+    contentEl.innerHTML = html;
+    contentEl.classList.add('loaded');
+    loadingEl.style.display = 'none';
+
+    // Add event listener
+    const addButton = contentEl.querySelector('.bundle-add-to-cart');
+    addButton.addEventListener('click', () => addBundleToCart(bundle, addButton));
+  }
+
+  async function addBundleToCart(bundle, button) {
+    button.disabled = true;
+    button.textContent = 'Adding to Cart...';
+
+    try {
+      // API returns items with: variantId, quantity, title, price
+      const cartItems = (bundle.items || []).map(item => {
+        // Extract numeric variant ID from GID if needed
+        let variantId = item.variantId;
+        if (variantId && variantId.includes('gid://')) {
+          variantId = variantId.split('/').pop();
+        }
+        return {
+          id: variantId,
+          quantity: item.quantity,
+          properties: {
+            '_bundle_id': bundle.id,
+            '_bundle_title': bundle.title,
+            '_bundle_savings': bundle.savingsAmount?.toFixed(2) || '0'
+          }
+        };
+      });
+
+      console.log('[Bundle Embed] Adding to cart:', cartItems);
+
+      const response = await fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: cartItems })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error('[Bundle Embed] Cart error response:', errorData);
+        throw new Error(errorData?.description || 'Failed to add to cart');
+      }
+
+      window.location.href = '/cart';
+    } catch (error) {
+      console.error('[Bundle Embed] Cart error:', error);
+      button.textContent = 'Add Bundle to Cart';
+      button.disabled = false;
+      alert(`Failed to add bundle to cart: ${error.message}`);
+    }
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Run when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectBundleDisplay);
+  } else {
+    injectBundleDisplay();
+  }
+})();
+</script>
 
 <style>
-  #bundle-app-embed {
-    margin: 32px 0;
+  #bundle-embed-display .bundle-display {
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
   }
 
-  .bundle-embed-wrapper {
-    border: 2px solid #5C6AC4;
-    border-radius: 12px;
-    padding: 24px;
-    background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
-    box-shadow: 0 4px 12px rgba(92, 106, 196, 0.1);
-  }
-
-  .bundle-embed-loading {
+  #bundle-embed-display .bundle-loading {
     text-align: center;
     padding: 20px;
     color: #666;
   }
 
-  .bundle-embed-content {
+  #bundle-embed-display .bundle-content {
     display: none;
   }
 
-  .bundle-embed-content.loaded {
+  #bundle-embed-display .bundle-content.loaded {
     display: block !important;
   }
 
-  .bundle-header {
+  #bundle-embed-display .bundle-header {
     margin-bottom: 16px;
-    padding-bottom: 16px;
-    border-bottom: 2px solid #e5e5e5;
   }
 
-  .bundle-badge {
-    display: inline-block;
-    background: #5C6AC4;
-    color: white;
-    padding: 4px 12px;
-    border-radius: 4px;
-    font-size: 12px;
+  #bundle-embed-display .bundle-title {
+    font-size: 20px;
     font-weight: bold;
     margin-bottom: 8px;
   }
 
-  .bundle-title {
-    font-size: 24px;
-    font-weight: bold;
-    margin-bottom: 8px;
-  }
-
-  .bundle-description {
+  #bundle-embed-display .bundle-description {
     color: #666;
     margin-bottom: 16px;
   }
 
-  .bundle-items {
-    margin: 20px 0;
+  #bundle-embed-display .bundle-items {
+    margin: 16px 0;
   }
 
-  .bundle-items-title {
-    font-weight: bold;
-    margin-bottom: 12px;
-    font-size: 16px;
-  }
-
-  .bundle-item {
+  #bundle-embed-display .bundle-item {
     display: flex;
     align-items: center;
     padding: 12px;
@@ -87,7 +289,7 @@
     border-radius: 4px;
   }
 
-  .bundle-item-image {
+  #bundle-embed-display .bundle-item-image {
     width: 60px;
     height: 60px;
     object-fit: cover;
@@ -95,65 +297,61 @@
     margin-right: 12px;
   }
 
-  .bundle-item-details {
+  #bundle-embed-display .bundle-item-details {
     flex: 1;
   }
 
-  .bundle-item-title {
+  #bundle-embed-display .bundle-item-title {
     font-weight: 500;
     margin-bottom: 4px;
   }
 
-  .bundle-item-price {
+  #bundle-embed-display .bundle-item-price {
     color: #666;
     font-size: 14px;
   }
 
-  .bundle-pricing {
-    border-top: 2px solid #e5e5e5;
+  #bundle-embed-display .bundle-pricing {
+    border-top: 1px solid #e5e5e5;
     padding-top: 16px;
-    margin-top: 20px;
+    margin-top: 16px;
   }
 
-  .bundle-price-row {
+  #bundle-embed-display .bundle-price-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
   }
 
-  .bundle-price-label {
+  #bundle-embed-display .bundle-price-label {
     font-size: 16px;
-    font-weight: 500;
   }
 
-  .bundle-price-value {
-    font-size: 24px;
+  #bundle-embed-display .bundle-price-value {
+    font-size: 20px;
     font-weight: bold;
-    color: #000;
   }
 
-  .bundle-price-compare {
+  #bundle-embed-display .bundle-price-compare {
     text-decoration: line-through;
     color: #999;
     margin-right: 8px;
-    font-size: 18px;
   }
 
-  .bundle-savings-badge {
+  #bundle-embed-display .bundle-savings-badge {
     display: inline-block;
     background: #50b83c;
     color: white;
-    padding: 6px 16px;
+    padding: 4px 12px;
     border-radius: 4px;
     font-size: 14px;
-    font-weight: bold;
     margin-top: 8px;
   }
 
-  .bundle-add-to-cart {
+  #bundle-embed-display .bundle-add-to-cart {
     width: 100%;
-    padding: 16px;
+    padding: 14px;
     background: #000;
     color: white;
     border: none;
@@ -162,230 +360,48 @@
     font-weight: bold;
     cursor: pointer;
     margin-top: 16px;
-    transition: opacity 0.2s;
   }
 
-  .bundle-add-to-cart:hover {
-    opacity: 0.8;
+  #bundle-embed-display .bundle-add-to-cart:hover {
+    opacity: 0.9;
   }
 
-  .bundle-add-to-cart:disabled {
+  #bundle-embed-display .bundle-add-to-cart:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .bundle-error {
+  #bundle-embed-display .bundle-error {
     color: #d72c0d;
     padding: 12px;
     background: #fef1f1;
     border-radius: 4px;
-    margin-top: 12px;
-  }
-
-  .bundle-debug {
-    background: #f0f0f0;
-    padding: 10px;
-    border-radius: 4px;
-    font-family: monospace;
-    font-size: 12px;
-    margin-top: 10px;
   }
 </style>
-
-<script>
-  (function() {
-    console.log('🎁 Bundle App Embed: Initializing...');
-
-    const embedEl = document.getElementById('bundle-app-embed');
-    if (!embedEl) {
-      console.error('❌ Bundle embed element not found');
-      return;
-    }
-
-    const productId = embedEl.dataset.productId;
-    console.log('📦 Product ID:', productId);
-
-    const loadingEl = embedEl.querySelector('.bundle-embed-loading');
-    const contentEl = embedEl.querySelector('.bundle-embed-content');
-
-    async function loadBundle() {
-      try {
-        console.log('🔄 Fetching bundle data...');
-
-        // Try App Proxy route
-        const apiUrl = `/apps/bundles/api/storefront/bundle/by-product/${productId}`;
-        console.log('🌐 API URL:', apiUrl);
-
-        const response = await fetch(apiUrl);
-        console.log('📡 Response status:', response.status);
-
-        if (!response.ok) {
-          if (response.status === 404) {
-            console.log('ℹ️ No bundle found for this product');
-            embedEl.style.display = 'none';
-            return;
-          }
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        console.log('✅ Bundle data received:', data);
-
-        if (!data.bundle) {
-          console.log('⚠️ No bundle in response');
-          embedEl.style.display = 'none';
-          return;
-        }
-
-        const bundle = data.bundle;
-        console.log('🎁 Rendering bundle:', bundle.title);
-
-        renderBundle(bundle);
-        embedEl.style.display = 'block';
-
-      } catch (error) {
-        console.error('❌ Error loading bundle:', error);
-        embedEl.style.display = 'none';
-      }
-    }
-
-    function repositionBundle() {
-      // Move bundle to appear right after the product form
-      const productForm = document.querySelector('form[action*="/cart/add"]') ||
-                         document.querySelector('.product-form') ||
-                         document.querySelector('[data-product-form]') ||
-                         document.querySelector('form.product__form');
-
-      if (productForm && embedEl.parentNode !== productForm.parentNode) {
-        console.log('📍 Repositioning bundle after product form');
-        productForm.parentNode.insertBefore(embedEl, productForm.nextSibling);
-      }
-    }
-
-    function renderBundle(bundle) {
-      let html = `
-        <div class="bundle-header">
-          <div class="bundle-badge">🎁 BUNDLE DEAL</div>
-          <div class="bundle-title">${escapeHtml(bundle.title)}</div>
-          ${bundle.description ? `<div class="bundle-description">${escapeHtml(bundle.description)}</div>` : ''}
-        </div>
-
-        <div class="bundle-items">
-          <div class="bundle-items-title">📦 What's included:</div>
-          ${(bundle.items || []).map(item => `
-            <div class="bundle-item">
-              ${item.product?.featuredImage ? `
-                <img src="${item.product.featuredImage}" alt="${escapeHtml(item.product.title || 'Product')}" class="bundle-item-image">
-              ` : ''}
-              <div class="bundle-item-details">
-                <div class="bundle-item-title">${item.quantity}x ${escapeHtml(item.product?.title || 'Product')}</div>
-                ${item.product?.variants?.[0] ? `
-                  <div class="bundle-item-price">€${item.product.variants[0].price}</div>
-                ` : ''}
-              </div>
-            </div>
-          `).join('')}
-        </div>
-
-        <div class="bundle-pricing">
-          <div class="bundle-price-row">
-            <span class="bundle-price-label">Bundle Price:</span>
-            <div>
-              ${bundle.totalCompareAtPrice && bundle.totalCompareAtPrice > bundle.totalPrice ? `
-                <span class="bundle-price-compare">€${bundle.totalCompareAtPrice.toFixed(2)}</span>
-              ` : ''}
-              <span class="bundle-price-value">€${bundle.totalPrice.toFixed(2)}</span>
-            </div>
-          </div>
-
-          ${bundle.savings > 0 ? `
-            <div class="bundle-savings-badge">
-              💰 You save €${bundle.savings.toFixed(2)} (${bundle.savingsPercentage.toFixed(0)}%)
-            </div>
-          ` : ''}
-        </div>
-
-        <button class="bundle-add-to-cart" onclick="window.addBundleToCart_${bundle.id.replace(/-/g, '_')}()">
-          🛒 Add Bundle to Cart
-        </button>
-      `;
-
-      contentEl.innerHTML = html;
-      contentEl.classList.add('loaded');
-      loadingEl.style.display = 'none';
-
-      // Move bundle to proper position
-      repositionBundle();
-
-      // Create global function for add to cart
-      window[`addBundleToCart_${bundle.id.replace(/-/g, '_')}`] = () => addBundleToCart(bundle);
-    }
-
-    async function addBundleToCart(bundle) {
-      const button = embedEl.querySelector('.bundle-add-to-cart');
-      button.disabled = true;
-      button.textContent = '⏳ Adding to Cart...';
-
-      try {
-        console.log('🛒 Adding bundle to cart:', bundle.title);
-
-        const items = bundle.items.map(item => ({
-          id: item.variantId || item.product?.variants?.[0]?.id,
-          quantity: item.quantity,
-          properties: {
-            '_bundle_id': bundle.id,
-            '_bundle_title': bundle.title,
-            '_bundle_savings': bundle.savings?.toFixed(2) || '0'
-          }
-        }));
-
-        console.log('📦 Cart items:', items);
-
-        const response = await fetch('/cart/add.js', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items })
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.description || 'Failed to add to cart');
-        }
-
-        console.log('✅ Bundle added to cart');
-
-        // Redirect to cart
-        window.location.href = '/cart';
-
-      } catch (error) {
-        console.error('❌ Error adding to cart:', error);
-        button.textContent = '🛒 Add Bundle to Cart';
-        button.disabled = false;
-        alert(`Failed to add bundle: ${error.message}`);
-      }
-    }
-
-    function escapeHtml(text) {
-      if (!text) return '';
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    // Load bundle on page load
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', loadBundle);
-    } else {
-      loadBundle();
-    }
-  })();
-</script>
-{% endif %}
 
 {% schema %}
 {
   "name": "Bundle Display Embed",
   "target": "body",
-  "settings": []
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "show_individual_prices",
+      "label": "Show individual prices",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_savings_badge",
+      "label": "Show savings badge",
+      "default": true
+    },
+    {
+      "type": "color",
+      "id": "primary_color",
+      "label": "Primary color",
+      "default": "#000000"
+    }
+  ]
 }
 {% endschema %}

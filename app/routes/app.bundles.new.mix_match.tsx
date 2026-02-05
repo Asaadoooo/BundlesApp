@@ -165,6 +165,7 @@ export default function NewMixMatchBundlePage() {
       products: [],
     },
   ]);
+  const [displayProduct, setDisplayProduct] = useState<{ id: string; title: string } | null>(null);
 
   const totalProducts = categories.reduce(
     (sum, cat) => sum + cat.products.length,
@@ -288,6 +289,8 @@ export default function NewMixMatchBundlePage() {
             description={description}
             onDescriptionChange={setDescription}
             titlePlaceholder="e.g., Build Your Own Gift Box"
+            displayProduct={displayProduct}
+            onDisplayProductChange={setDisplayProduct}
           />
 
           <Card>

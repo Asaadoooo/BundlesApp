@@ -136,6 +136,7 @@ export default function NewFixedBundlePage() {
   const [showSavingsAmount, setShowSavingsAmount] = useState(true);
   const [trackInventory, setTrackInventory] = useState(true);
   const [products, setProducts] = useState<SelectedProduct[]>([]);
+  const [displayProduct, setDisplayProduct] = useState<{ id: string; title: string } | null>(null);
 
   const totalOriginalPrice = products.reduce(
     (sum, p) => sum + p.price * p.quantity,
@@ -238,6 +239,8 @@ export default function NewFixedBundlePage() {
             description={description}
             onDescriptionChange={setDescription}
             titlePlaceholder="e.g., Holiday Gift Set"
+            displayProduct={displayProduct}
+            onDisplayProductChange={setDisplayProduct}
           />
 
           <Card>
