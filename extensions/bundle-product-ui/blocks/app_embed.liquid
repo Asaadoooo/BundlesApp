@@ -1,0 +1,391 @@
+{% comment %}
+  Bundle Display App Embed
+  Automatically injects on product pages when a bundle exists
+{% endcomment %}
+
+{% if template contains 'product' %}
+<div id="bundle-app-embed" data-product-id="{{ product.id }}" style="display: none;">
+  <div class="bundle-embed-wrapper">
+    <div class="bundle-embed-loading">
+      <p>🔍 Checking for bundles...</p>
+    </div>
+    <div class="bundle-embed-content"></div>
+  </div>
+</div>
+
+<style>
+  #bundle-app-embed {
+    margin: 32px 0;
+  }
+
+  .bundle-embed-wrapper {
+    border: 2px solid #5C6AC4;
+    border-radius: 12px;
+    padding: 24px;
+    background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+    box-shadow: 0 4px 12px rgba(92, 106, 196, 0.1);
+  }
+
+  .bundle-embed-loading {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+  }
+
+  .bundle-embed-content {
+    display: none;
+  }
+
+  .bundle-embed-content.loaded {
+    display: block !important;
+  }
+
+  .bundle-header {
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #e5e5e5;
+  }
+
+  .bundle-badge {
+    display: inline-block;
+    background: #5C6AC4;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+
+  .bundle-title {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+
+  .bundle-description {
+    color: #666;
+    margin-bottom: 16px;
+  }
+
+  .bundle-items {
+    margin: 20px 0;
+  }
+
+  .bundle-items-title {
+    font-weight: bold;
+    margin-bottom: 12px;
+    font-size: 16px;
+  }
+
+  .bundle-item {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: #f9f9f9;
+    border-radius: 4px;
+  }
+
+  .bundle-item-image {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 4px;
+    margin-right: 12px;
+  }
+
+  .bundle-item-details {
+    flex: 1;
+  }
+
+  .bundle-item-title {
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .bundle-item-price {
+    color: #666;
+    font-size: 14px;
+  }
+
+  .bundle-pricing {
+    border-top: 2px solid #e5e5e5;
+    padding-top: 16px;
+    margin-top: 20px;
+  }
+
+  .bundle-price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .bundle-price-label {
+    font-size: 16px;
+    font-weight: 500;
+  }
+
+  .bundle-price-value {
+    font-size: 24px;
+    font-weight: bold;
+    color: #000;
+  }
+
+  .bundle-price-compare {
+    text-decoration: line-through;
+    color: #999;
+    margin-right: 8px;
+    font-size: 18px;
+  }
+
+  .bundle-savings-badge {
+    display: inline-block;
+    background: #50b83c;
+    color: white;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: bold;
+    margin-top: 8px;
+  }
+
+  .bundle-add-to-cart {
+    width: 100%;
+    padding: 16px;
+    background: #000;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 16px;
+    transition: opacity 0.2s;
+  }
+
+  .bundle-add-to-cart:hover {
+    opacity: 0.8;
+  }
+
+  .bundle-add-to-cart:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .bundle-error {
+    color: #d72c0d;
+    padding: 12px;
+    background: #fef1f1;
+    border-radius: 4px;
+    margin-top: 12px;
+  }
+
+  .bundle-debug {
+    background: #f0f0f0;
+    padding: 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    margin-top: 10px;
+  }
+</style>
+
+<script>
+  (function() {
+    console.log('🎁 Bundle App Embed: Initializing...');
+
+    const embedEl = document.getElementById('bundle-app-embed');
+    if (!embedEl) {
+      console.error('❌ Bundle embed element not found');
+      return;
+    }
+
+    const productId = embedEl.dataset.productId;
+    console.log('📦 Product ID:', productId);
+
+    const loadingEl = embedEl.querySelector('.bundle-embed-loading');
+    const contentEl = embedEl.querySelector('.bundle-embed-content');
+
+    async function loadBundle() {
+      try {
+        console.log('🔄 Fetching bundle data...');
+
+        // Try App Proxy route
+        const apiUrl = `/apps/bundles/api/storefront/bundle/by-product/${productId}`;
+        console.log('🌐 API URL:', apiUrl);
+
+        const response = await fetch(apiUrl);
+        console.log('📡 Response status:', response.status);
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            console.log('ℹ️ No bundle found for this product');
+            embedEl.style.display = 'none';
+            return;
+          }
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('✅ Bundle data received:', data);
+
+        if (!data.bundle) {
+          console.log('⚠️ No bundle in response');
+          embedEl.style.display = 'none';
+          return;
+        }
+
+        const bundle = data.bundle;
+        console.log('🎁 Rendering bundle:', bundle.title);
+
+        renderBundle(bundle);
+        embedEl.style.display = 'block';
+
+      } catch (error) {
+        console.error('❌ Error loading bundle:', error);
+        embedEl.style.display = 'none';
+      }
+    }
+
+    function repositionBundle() {
+      // Move bundle to appear right after the product form
+      const productForm = document.querySelector('form[action*="/cart/add"]') ||
+                         document.querySelector('.product-form') ||
+                         document.querySelector('[data-product-form]') ||
+                         document.querySelector('form.product__form');
+
+      if (productForm && embedEl.parentNode !== productForm.parentNode) {
+        console.log('📍 Repositioning bundle after product form');
+        productForm.parentNode.insertBefore(embedEl, productForm.nextSibling);
+      }
+    }
+
+    function renderBundle(bundle) {
+      let html = `
+        <div class="bundle-header">
+          <div class="bundle-badge">🎁 BUNDLE DEAL</div>
+          <div class="bundle-title">${escapeHtml(bundle.title)}</div>
+          ${bundle.description ? `<div class="bundle-description">${escapeHtml(bundle.description)}</div>` : ''}
+        </div>
+
+        <div class="bundle-items">
+          <div class="bundle-items-title">📦 What's included:</div>
+          ${(bundle.items || []).map(item => `
+            <div class="bundle-item">
+              ${item.product?.featuredImage ? `
+                <img src="${item.product.featuredImage}" alt="${escapeHtml(item.product.title || 'Product')}" class="bundle-item-image">
+              ` : ''}
+              <div class="bundle-item-details">
+                <div class="bundle-item-title">${item.quantity}x ${escapeHtml(item.product?.title || 'Product')}</div>
+                ${item.product?.variants?.[0] ? `
+                  <div class="bundle-item-price">€${item.product.variants[0].price}</div>
+                ` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="bundle-pricing">
+          <div class="bundle-price-row">
+            <span class="bundle-price-label">Bundle Price:</span>
+            <div>
+              ${bundle.totalCompareAtPrice && bundle.totalCompareAtPrice > bundle.totalPrice ? `
+                <span class="bundle-price-compare">€${bundle.totalCompareAtPrice.toFixed(2)}</span>
+              ` : ''}
+              <span class="bundle-price-value">€${bundle.totalPrice.toFixed(2)}</span>
+            </div>
+          </div>
+
+          ${bundle.savings > 0 ? `
+            <div class="bundle-savings-badge">
+              💰 You save €${bundle.savings.toFixed(2)} (${bundle.savingsPercentage.toFixed(0)}%)
+            </div>
+          ` : ''}
+        </div>
+
+        <button class="bundle-add-to-cart" onclick="window.addBundleToCart_${bundle.id.replace(/-/g, '_')}()">
+          🛒 Add Bundle to Cart
+        </button>
+      `;
+
+      contentEl.innerHTML = html;
+      contentEl.classList.add('loaded');
+      loadingEl.style.display = 'none';
+
+      // Move bundle to proper position
+      repositionBundle();
+
+      // Create global function for add to cart
+      window[`addBundleToCart_${bundle.id.replace(/-/g, '_')}`] = () => addBundleToCart(bundle);
+    }
+
+    async function addBundleToCart(bundle) {
+      const button = embedEl.querySelector('.bundle-add-to-cart');
+      button.disabled = true;
+      button.textContent = '⏳ Adding to Cart...';
+
+      try {
+        console.log('🛒 Adding bundle to cart:', bundle.title);
+
+        const items = bundle.items.map(item => ({
+          id: item.variantId || item.product?.variants?.[0]?.id,
+          quantity: item.quantity,
+          properties: {
+            '_bundle_id': bundle.id,
+            '_bundle_title': bundle.title,
+            '_bundle_savings': bundle.savings?.toFixed(2) || '0'
+          }
+        }));
+
+        console.log('📦 Cart items:', items);
+
+        const response = await fetch('/cart/add.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.description || 'Failed to add to cart');
+        }
+
+        console.log('✅ Bundle added to cart');
+
+        // Redirect to cart
+        window.location.href = '/cart';
+
+      } catch (error) {
+        console.error('❌ Error adding to cart:', error);
+        button.textContent = '🛒 Add Bundle to Cart';
+        button.disabled = false;
+        alert(`Failed to add bundle: ${error.message}`);
+      }
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Load bundle on page load
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', loadBundle);
+    } else {
+      loadBundle();
+    }
+  })();
+</script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Bundle Display Embed",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}

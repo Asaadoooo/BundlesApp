@@ -1,0 +1,30 @@
+{
+  "bundle": {
+    "title": "Bundel",
+    "whatsIncluded": "Wat is inbegrepen:",
+    "bundlePrice": "Bundelprijs:",
+    "youSave": "Je bespaart",
+    "addToCart": "Bundel toevoegen aan winkelwagen",
+    "addingToCart": "Toevoegen aan winkelwagen...",
+    "outOfStock": "Bundel is momenteel niet op voorraad",
+    "lowStock": "Nog slechts {count} bundels op voorraad",
+    "inStock": "Op voorraad",
+    "showDetails": "Details tonen",
+    "hideDetails": "Details verbergen",
+    "bundleContents": "Bundelinhoud:",
+    "itemsCannotBeRemovedIndividually": "Dit is een bundel - items kunnen niet afzonderlijk worden verwijderd",
+    "completeBundleOneClick": "Volledige bundel met één klik",
+    "betterValueThanSeparate": "Betere waarde dan apart kopen",
+    "saveWithBundle": "Bespaar {amount} met deze bundel",
+    "itemsStayTogether": "Bundelitems blijven samen",
+    "specialPricingApplied": "Speciale bundelprijzen toegepast"
+  },
+  "errors": {
+    "failedToLoadBundle": "Kan bundelinformatie niet laden",
+    "failedToAddToCart": "Kan bundel niet aan winkelwagen toevoegen",
+    "errorOccurred": "Er is een fout opgetreden"
+  },
+  "product": {
+    "item": "{count, plural, one {item} other {items}}"
+  }
+}

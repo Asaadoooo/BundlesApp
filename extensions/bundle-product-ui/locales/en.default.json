@@ -1,0 +1,30 @@
+{
+  "bundle": {
+    "title": "Bundle",
+    "whatsIncluded": "What's included:",
+    "bundlePrice": "Bundle Price:",
+    "youSave": "You save",
+    "addToCart": "Add Bundle to Cart",
+    "addingToCart": "Adding to Cart...",
+    "outOfStock": "Bundle is currently out of stock",
+    "lowStock": "Only {count} bundles left in stock",
+    "inStock": "In Stock",
+    "showDetails": "Show Details",
+    "hideDetails": "Hide Details",
+    "bundleContents": "Bundle Contents:",
+    "itemsCannotBeRemovedIndividually": "This is a bundle - items cannot be removed individually",
+    "completeBundleOneClick": "Complete bundle in one click",
+    "betterValueThanSeparate": "Better value than buying separately",
+    "saveWithBundle": "Save {amount} with this bundle",
+    "itemsStayTogether": "Bundle items stay together",
+    "specialPricingApplied": "Special bundle pricing applied"
+  },
+  "errors": {
+    "failedToLoadBundle": "Failed to load bundle information",
+    "failedToAddToCart": "Failed to add bundle to cart",
+    "errorOccurred": "An error occurred"
+  },
+  "product": {
+    "item": "{count, plural, one {item} other {items}}"
+  }
+}

@@ -1,0 +1,308 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// ==========================================
+// BUNDLE MODELS
+// ==========================================
+
+// Main Bundle entity
+model Bundle {
+  id   String @id @default(cuid())
+  shop String // Store domain
+
+  // Basic Info
+  title       String
+  description String?
+  handle      String // URL-friendly slug
+
+  // Bundle Type: FIXED, MIX_MATCH, VOLUME, TIERED
+  type   String
+  status String @default("draft") // draft, active, scheduled, archived
+
+  // Pricing
+  compareAtPrice Float? // Original price (strike-through)
+  price          Float? // Final bundle price (for fixed bundles)
+  discountType   String? // percentage, fixed_amount, fixed_price
+  discountValue  Float? // Discount amount/percentage
+
+  // Display Settings
+  showCompareAtPrice Boolean @default(true)
+  showSavingsAmount  Boolean @default(true)
+  showSavingsPercent Boolean @default(false)
+
+  // Inventory Settings
+  trackInventory         Boolean @default(true)
+  continueWhenOutOfStock Boolean @default(false)
+
+  // Mix & Match Settings
+  minProducts     Int? // Min products customer must select
+  maxProducts     Int? // Max products customer can select
+  allowDuplicates Boolean @default(true)
+
+  // Volume Bundle Settings
+  applyToSameProduct   Boolean @default(false) // Only same product or any
+  combineWithDiscounts Boolean @default(false)
+
+  // Scheduling
+  startDate DateTime?
+  endDate   DateTime?
+
+  // SEO & Display
+  metaTitle       String?
+  metaDescription String?
+  imageUrl        String?
+
+  // Shopify References
+  shopifyProductId String? // If bundle is synced as a product
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  items       BundleItem[]
+  tiers       BundleTier[]
+  volumeRules VolumeRule[]
+  categories  BundleCategory[]
+  analytics   BundleAnalytics[]
+
+  @@unique([shop, handle])
+  @@index([shop])
+  @@index([status])
+  @@index([type])
+}
+
+// Products/Variants included in a bundle
+model BundleItem {
+  id       String @id @default(cuid())
+  bundleId String
+  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+
+  // Shopify Product Reference
+  shopifyProductId String
+  shopifyVariantId String? // Specific variant, null = any variant
+
+  // Cached Product Info (for display without API calls)
+  productTitle String
+  variantTitle String?
+  productImage String?
+  sku          String?
+
+  // Bundle Item Settings
+  quantity   Int     @default(1)
+  position   Int     @default(0) // Display order
+  isRequired Boolean @default(true)
+
+  // Item-level pricing (for mix & match)
+  originalPrice   Float?
+  discountedPrice Float?
+
+  // For Mix & Match - which category this belongs to
+  categoryId String?
+  category   BundleCategory? @relation(fields: [categoryId], references: [id])
+
+  // Selection constraints for mix & match
+  minQuantity Int  @default(0)
+  maxQuantity Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bundleId])
+  @@index([shopifyProductId])
+  @@index([categoryId])
+}
+
+// Categories for Mix & Match bundles
+model BundleCategory {
+  id       String @id @default(cuid())
+  bundleId String
+  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  position    Int     @default(0)
+
+  // Selection rules
+  minSelect Int  @default(0) // Min items to select from this category
+  maxSelect Int? // Max items (null = unlimited)
+
+  // Display
+  imageUrl  String?
+  collapsed Boolean @default(false)
+
+  items BundleItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bundleId])
+}
+
+// Tiers for Tiered Bundles (Bronze/Silver/Gold)
+model BundleTier {
+  id       String @id @default(cuid())
+  bundleId String
+  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+
+  name        String // "Basic", "Premium", "Deluxe"
+  description String?
+  position    Int     @default(0) // Display order
+
+  // Pricing
+  price          Float // Tier price (e.g., €35, €65, €95)
+  compareAtPrice Float? // Original value
+
+  // Product allowance
+  productCount Int // Number of products in this tier
+
+  // Allowed products (JSON array of product IDs)
+  // If empty, all bundle items are available
+  allowedProducts String? // JSON: ["gid://...", "gid://..."]
+
+  // Display
+  featured  Boolean @default(false)
+  badgeText String? // "Most Popular", "Best Value"
+  imageUrl  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bundleId])
+}
+
+// Volume discount rules
+model VolumeRule {
+  id       String @id @default(cuid())
+  bundleId String
+  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+
+  // Quantity thresholds
+  minQuantity Int // Buy X or more
+  maxQuantity Int? // Up to Y (null = unlimited)
+
+  // Discount
+  discountType  String // percentage, fixed_amount, fixed_price_per_item
+  discountValue Float // e.g., 10 for 10%, or 5 for $5 off
+
+  // Display
+  label String? // "Buy 5, Save 10%"
+
+  position Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bundleId])
+}
+
+// Analytics tracking
+model BundleAnalytics {
+  id       String @id @default(cuid())
+  bundleId String
+  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+
+  date DateTime // Daily aggregation
+
+  // Metrics
+  views          Int   @default(0)
+  addToCartCount Int   @default(0)
+  purchaseCount  Int   @default(0)
+  revenue        Float @default(0)
+
+  // Conversion tracking
+  uniqueVisitors Int   @default(0)
+  conversionRate Float @default(0)
+
+  // Average values
+  averageOrderValue Float @default(0)
+  averageDiscount   Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bundleId, date])
+  @@index([bundleId])
+  @@index([date])
+}
+
+// Bundle purchase history (for detailed analytics)
+model BundlePurchase {
+  id       String @id @default(cuid())
+  bundleId String
+  shop     String
+
+  // Shopify Order Reference
+  shopifyOrderId    String
+  shopifyCustomerId String?
+
+  // Purchase Details
+  quantity       Int
+  unitPrice      Float
+  totalPrice     Float
+  discountAmount Float
+
+  // For tiered bundles
+  tierName String?
+
+  // Selected products (for mix & match)
+  selectedItems String? // JSON array of selected product/variant IDs
+
+  purchasedAt DateTime @default(now())
+
+  @@index([bundleId])
+  @@index([shop])
+  @@index([purchasedAt])
+}
+
+// Inventory snapshot for bundle availability
+model BundleInventorySnapshot {
+  id       String @id @default(cuid())
+  bundleId String
+
+  // Availability
+  isAvailable    Boolean
+  availableCount Int // How many complete bundles can be fulfilled
+
+  // Limiting factors
+  limitingProduct String? // Product ID that limits availability
+  limitingVariant String? // Variant ID
+  limitingStock   Int? // Stock of limiting item
+
+  checkedAt DateTime @default(now())
+
+  @@index([bundleId])
+  @@index([checkedAt])
+}

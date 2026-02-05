@@ -1,0 +1,325 @@
+{% comment %}
+  Bundle Display Block
+  Displays bundle information on product pages
+{% endcomment %}
+
+<div class="bundle-display" data-product-id="{{ product.id }}">
+  <div class="bundle-loading">
+    <p>Loading bundle...</p>
+  </div>
+  <div class="bundle-content" style="display: none;">
+    <!-- Bundle content will be injected by JavaScript -->
+  </div>
+</div>
+
+<style>
+  .bundle-display {
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+  }
+
+  .bundle-loading {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+  }
+
+  .bundle-content {
+    display: none;
+  }
+
+  .bundle-content.loaded {
+    display: block !important;
+  }
+
+  .bundle-header {
+    margin-bottom: 16px;
+  }
+
+  .bundle-title {
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: {{ block.settings.primary_color }};
+  }
+
+  .bundle-description {
+    color: #666;
+    margin-bottom: 16px;
+  }
+
+  .bundle-items {
+    margin: 16px 0;
+  }
+
+  .bundle-item {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: #f9f9f9;
+    border-radius: 4px;
+  }
+
+  .bundle-item-image {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 4px;
+    margin-right: 12px;
+  }
+
+  .bundle-item-details {
+    flex: 1;
+  }
+
+  .bundle-item-title {
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .bundle-item-price {
+    color: #666;
+    font-size: 14px;
+  }
+
+  .bundle-pricing {
+    border-top: 1px solid #e5e5e5;
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+
+  .bundle-price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .bundle-price-label {
+    font-size: 16px;
+  }
+
+  .bundle-price-value {
+    font-size: 20px;
+    font-weight: bold;
+    color: {{ block.settings.primary_color }};
+  }
+
+  .bundle-price-compare {
+    text-decoration: line-through;
+    color: #999;
+    margin-right: 8px;
+  }
+
+  .bundle-savings-badge {
+    display: inline-block;
+    background: #50b83c;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    margin-top: 8px;
+  }
+
+  .bundle-add-to-cart {
+    width: 100%;
+    padding: 14px;
+    background: {{ block.settings.primary_color }};
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 16px;
+  }
+
+  .bundle-add-to-cart:hover {
+    opacity: 0.9;
+  }
+
+  .bundle-add-to-cart:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .bundle-error {
+    color: #d72c0d;
+    padding: 12px;
+    background: #fef1f1;
+    border-radius: 4px;
+    margin-top: 12px;
+  }
+</style>
+
+<script>
+  (function() {
+    const bundleDisplay = document.querySelector('.bundle-display');
+    const productId = bundleDisplay.dataset.productId;
+    const showIndividualPrices = {{ block.settings.show_individual_prices }};
+    const showSavingsBadge = {{ block.settings.show_savings_badge }};
+
+    async function loadBundle() {
+      try {
+        // Fetch bundle data via App Proxy
+        const response = await fetch(`/apps/bundles/api/storefront/bundle/by-product/${productId}`);
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            // No bundle for this product, hide the block
+            bundleDisplay.style.display = 'none';
+            return;
+          }
+          throw new Error('Failed to load bundle');
+        }
+
+        const data = await response.json();
+        const bundle = data.bundle;
+
+        // Render bundle
+        renderBundle(bundle);
+      } catch (error) {
+        console.error('Error loading bundle:', error);
+        bundleDisplay.querySelector('.bundle-loading').innerHTML =
+          '<div class="bundle-error">Failed to load bundle information</div>';
+      }
+    }
+
+    function renderBundle(bundle) {
+      const loadingEl = bundleDisplay.querySelector('.bundle-loading');
+      const contentEl = bundleDisplay.querySelector('.bundle-content');
+
+      let html = `
+        <div class="bundle-header">
+          <div class="bundle-title">${escapeHtml(bundle.title)}</div>
+          ${bundle.description ? `<div class="bundle-description">${escapeHtml(bundle.description)}</div>` : ''}
+        </div>
+
+        <div class="bundle-items">
+          <strong>What's included:</strong>
+          ${bundle.items.map(item => `
+            <div class="bundle-item">
+              ${item.product?.featuredImage ? `
+                <img src="${item.product.featuredImage}" alt="${escapeHtml(item.product.title)}" class="bundle-item-image">
+              ` : ''}
+              <div class="bundle-item-details">
+                <div class="bundle-item-title">${item.quantity}x ${escapeHtml(item.product?.title || 'Product')}</div>
+                ${showIndividualPrices && item.product?.variants[0] ? `
+                  <div class="bundle-item-price">${item.product.variants[0].price}</div>
+                ` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="bundle-pricing">
+          <div class="bundle-price-row">
+            <span class="bundle-price-label">Bundle Price:</span>
+            <div>
+              ${bundle.totalCompareAtPrice && bundle.totalCompareAtPrice > bundle.totalPrice ? `
+                <span class="bundle-price-compare">€${bundle.totalCompareAtPrice.toFixed(2)}</span>
+              ` : ''}
+              <span class="bundle-price-value">€${bundle.totalPrice.toFixed(2)}</span>
+            </div>
+          </div>
+
+          ${showSavingsBadge && bundle.savings > 0 ? `
+            <div class="bundle-savings-badge">
+              You save €${bundle.savings.toFixed(2)} (${bundle.savingsPercentage.toFixed(0)}%)
+            </div>
+          ` : ''}
+        </div>
+
+        <button class="bundle-add-to-cart" data-bundle-id="${bundle.id}">
+          Add Bundle to Cart
+        </button>
+      `;
+
+      contentEl.innerHTML = html;
+      contentEl.classList.add('loaded');
+      loadingEl.style.display = 'none';
+
+      // Add event listener to add-to-cart button
+      const addButton = contentEl.querySelector('.bundle-add-to-cart');
+      addButton.addEventListener('click', () => addBundleToCart(bundle));
+    }
+
+    async function addBundleToCart(bundle) {
+      const button = bundleDisplay.querySelector('.bundle-add-to-cart');
+      button.disabled = true;
+      button.textContent = 'Adding to Cart...';
+
+      try {
+        // Add bundle items to cart
+        const items = bundle.items.map(item => ({
+          id: item.variantId || item.product.variants[0].id,
+          quantity: item.quantity,
+          properties: {
+            '_bundle_id': bundle.id,
+            '_bundle_title': bundle.title,
+            '_bundle_savings': bundle.savings?.toFixed(2) || '0'
+          }
+        }));
+
+        const response = await fetch('/cart/add.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items })
+        });
+
+        if (!response.ok) throw new Error('Failed to add to cart');
+
+        // Redirect to cart
+        window.location.href = '/cart';
+      } catch (error) {
+        console.error('Error adding to cart:', error);
+        button.textContent = 'Add Bundle to Cart';
+        button.disabled = false;
+        alert('Failed to add bundle to cart. Please try again.');
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Load bundle on page load
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', loadBundle);
+    } else {
+      loadBundle();
+    }
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Bundle Display",
+  "target": "section",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "show_individual_prices",
+      "label": "Show individual prices",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_savings_badge",
+      "label": "Show savings badge",
+      "default": true
+    },
+    {
+      "type": "color",
+      "id": "primary_color",
+      "label": "Primary color",
+      "default": "#000000"
+    }
+  ]
+}
+{% endschema %}

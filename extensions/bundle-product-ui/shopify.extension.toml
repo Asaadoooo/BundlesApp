@@ -1,0 +1,42 @@
+api_version = "2025-01"
+
+[[extensions]]
+uid = "002e3a38-681a-f47f-9f59-f9d67ff6cd47382c75fd"
+type = "theme"
+name = "Bundle Display"
+handle = "bundle-display"
+
+  [[extensions.blocks]]
+  type = "bundle_display"
+  name = "Bundle Display Block"
+  target = "section"
+
+  # App Embed - Always available on all pages
+  [[extensions.blocks]]
+  type = "app_embed"
+  name = "Bundle Display Embed"
+  target = "body"
+
+    [[extensions.blocks.settings]]
+    type = "checkbox"
+    id = "auto_inject"
+    label = "Auto-inject on product pages"
+    default = true
+
+    [[extensions.blocks.settings]]
+    type = "checkbox"
+    id = "show_individual_prices"
+    label = "Show individual prices"
+    default = true
+
+    [[extensions.blocks.settings]]
+    type = "checkbox"
+    id = "show_savings_badge"
+    label = "Show savings badge"
+    default = true
+
+    [[extensions.blocks.settings]]
+    type = "color"
+    id = "primary_color"
+    label = "Primary color"
+    default = "#000000"
