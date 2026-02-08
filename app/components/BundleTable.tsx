@@ -7,6 +7,7 @@ import {
 } from "@shopify/polaris";
 import { StatusBadge } from "./StatusBadge";
 import { BundleTypeBadge } from "./BundleTypeBadge";
+import { BundleStatus } from "~/types/bundle";
 import { formatPrice } from "~/utils/bundle";
 
 export interface Bundle {
@@ -25,8 +26,7 @@ interface BundleTableProps {
   bundles: Bundle[];
   onNavigate: (id: string) => void;
   onBulkDelete?: (ids: string[]) => void;
-  onBulkActivate?: (ids: string[]) => void;
-  onBulkDeactivate?: (ids: string[]) => void;
+  onBulkToggleStatus?: (ids: string[], newStatus: string) => void;
   filters?: ReactNode;
 }
 
@@ -43,43 +43,35 @@ export function BundleTable({
   bundles,
   onNavigate,
   onBulkDelete,
-  onBulkActivate,
-  onBulkDeactivate,
+  onBulkToggleStatus,
   filters,
 }: BundleTableProps) {
-  const resourceName = {
-    singular: "bundle",
-    plural: "bundles",
-  };
-
   const { selectedResources, allResourcesSelected, handleSelectionChange } =
     useIndexResourceState(bundles as { id: string }[]);
 
-  const promotedBulkActions = [
-    ...(onBulkActivate
-      ? [
-          {
-            content: "Activate",
-            onAction: () => onBulkActivate(selectedResources),
-          },
-        ]
-      : []),
-    ...(onBulkDeactivate
-      ? [
-          {
-            content: "Deactivate",
-            onAction: () => onBulkDeactivate(selectedResources),
-          },
-        ]
-      : []),
-  ];
+  const allSelectedAreActive = selectedResources.length > 0 &&
+    selectedResources.every((id) => {
+      const bundle = bundles.find((b) => b.id === id);
+      return bundle?.status === BundleStatus.ACTIVE;
+    });
 
-  const bulkActions = [
+  const toggleLabel = allSelectedAreActive ? "Deactivate" : "Activate";
+  const toggleStatus = allSelectedAreActive ? BundleStatus.DRAFT : BundleStatus.ACTIVE;
+
+  const promotedBulkActions = [
+    ...(onBulkToggleStatus
+      ? [
+          {
+            content: toggleLabel,
+            onAction: () => onBulkToggleStatus(selectedResources, toggleStatus),
+          },
+        ]
+      : []),
     ...(onBulkDelete
       ? [
           {
             content: "Delete",
-            destructive: true,
+            destructive: true as const,
             onAction: () => onBulkDelete(selectedResources),
           },
         ]
@@ -127,7 +119,7 @@ export function BundleTable({
     <Card padding="0">
       {filters}
       <IndexTable
-        resourceName={resourceName}
+        resourceName={{ singular: "bundle", plural: "bundles" }}
         itemCount={bundles.length}
         selectedItemsCount={
           allResourcesSelected ? "All" : selectedResources.length
@@ -142,7 +134,6 @@ export function BundleTable({
           { title: "Created" },
         ]}
         promotedBulkActions={promotedBulkActions.length > 0 ? promotedBulkActions : undefined}
-        bulkActions={bulkActions.length > 0 ? bulkActions : undefined}
         selectable
       >
         {rowMarkup}
